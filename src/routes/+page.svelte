@@ -4,13 +4,15 @@
 
 <script>
   import { fly } from 'svelte/transition';
-  import { tick } from 'svelte';
-  
+  import { onMount, tick } from 'svelte';
+
   let inputVisible = false;
   let expanded = false;
   let userInput = '';
   let response = '';
   let currentTranslationIndex = 0;
+  let typing = false;
+  let displayedResponse = '';
 
   const translations = [
     "Affirmations",
@@ -35,13 +37,29 @@
   }, 2000);
 
   async function handleSubmit() {
+    expanded = false; // Start shrinking animation
     const res = await fetch('/api/affirmations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: userInput }),
     });
     const data = await res.json();
-    response = data.affirmation;
+    response = data.affirmation.trim();
+    await new Promise(resolve => setTimeout(resolve, 400)); // Wait for shrink animation
+    inputVisible = false; // Hide input completely
+    startTypingAnimation();
+  }
+
+  async function startTypingAnimation() {
+    typing = true;
+    displayedResponse = '';
+    await tick(); // Wait for the DOM to update
+
+    for (let i = 0; i < response.length; i++) {
+      displayedResponse += response[i];
+      await new Promise(resolve => setTimeout(resolve, 20)); // Typing speed
+    }
+    typing = false;
   }
 
   function handleKeyDown(event) {
@@ -93,12 +111,13 @@
   }
 
   .content {
-    margin-top: 12rem; /* Adjust based on header height */
+    margin-top: 8rem; /* Adjust based on header height */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     flex: 1;
+    min-height: calc(100vh - 8rem); /* Ensure full height minus margin */
   }
 
   .button-container {
@@ -135,7 +154,7 @@
     width: 0;
     height: 3rem; /* Match the height of the plus button */
     overflow: hidden;
-    transition: width 0.4s ease;
+    transition: width 0.4s ease, opacity 0.4s ease; /* Add opacity transition */
     position: absolute; /* Changed to absolute */
     top: 30%; /* Vertically center */
     left: 50%; /* Horizontally center */
@@ -144,6 +163,12 @@
 
   .input-box.expanded {
     width: 320px;
+    opacity: 1;
+  }
+
+  .input-box:not(.expanded) {
+    width: 0;
+    opacity: 0;
   }
 
   input {
@@ -173,6 +198,27 @@
     border-radius: 5px;
     margin-left: 0.5rem;
   }
+
+  .response-text {
+    font-size: 2.5rem; /* Larger text size */
+    line-height: 1.4;
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    opacity: 0;
+    animation: fadeIn 0.5s forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 </style>
 
 <div class="header">
@@ -191,7 +237,7 @@
 
 <div class="content">
   <div class="button-container">
-    {#if !inputVisible}
+    {#if !inputVisible && !displayedResponse}
       <button
         class="plus-button"
         on:click={async () => {
@@ -201,7 +247,7 @@
         }}>
         +
       </button>
-    {:else}
+    {:else if inputVisible}
       <div class="input-box {expanded ? 'expanded' : ''}">
         <input
           type="text"
@@ -214,7 +260,9 @@
     {/if}
   </div>
 
-  {#if response}
-    <p style="margin-top: 20px; text-align: center;">{response}</p>
+  {#if displayedResponse}
+    <p class="response-text" transition:fly={{ y: 20, duration: 800 }}>
+      {displayedResponse}
+    </p>
   {/if}
 </div>
