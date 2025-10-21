@@ -1,6 +1,6 @@
-# sv
+## Check it out!
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+https://aiaffirmations.vercel.app/
 
 ## Creating a project
 
