@@ -1,22 +1,14 @@
-import { HfInference } from '@huggingface/inference';
 import { env } from '$env/dynamic/private';
-
-const hf = new HfInference(env.HUGGINGFACE_API_KEY);
 
 export async function POST({ request }) {
   try {
     const { prompt } = await request.json();
     
-    if (!env.HUGGINGFACE_API_KEY) {
-      throw new Error('Missing Hugging Face API key');
+    if (!env.GEMINI_API_KEY) {
+      throw new Error('Missing Gemini API key');
     }
 
-    const chatCompletion = await hf.chatCompletion({
-      model: "meta-llama/Llama-3.1-8B-Instruct",
-      messages: [
-        {
-          role: "user",
-          content: `Generate a single inspiring affirmation about: ${prompt}. Use this list as inspiration (You are ready,          Your efforts help you succeed,
+    const systemPrompt = `Generate a single inspiring affirmation about: ${prompt}. Use this list as inspiration (You are ready,          Your efforts help you succeed,
           You can make a real difference,
           Your hard work will pay off,
           You are strong,
@@ -58,27 +50,45 @@ export async function POST({ request }) {
           If the input makes no sense, tell the user to enter another time, or make a joke about it being unclear. 
           However, your response should be only the affirmation, nothing else, and put it inside quotes. 
           If the prompt is specific, you can also be specific and a little longer than the examples, just make sure you are talking in 2nd person. 
-          Format the response as: "<affirmation>"`}
-        ],
+          Format the response as: "<affirmation>"`;
 
-          provider: "sambanova",
-          max_tokens: 50,
-          temperature: 0.7,
-          top_p: 0.95
-        });
-          
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: systemPrompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            topP: 0.95,
+            maxOutputTokens: 100,
+          }
+        })
+      }
+    );
 
-    if (!chatCompletion.choices || chatCompletion.choices.length === 0) {
-      throw new Error('No response generated');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
     }
 
-    let generatedText = chatCompletion.choices[0].message.content;
+    const data = await response.json();
 
-    // Clean up response
-    //generatedText = generatedText
-    //.replace(/^Response:|^Assistant:|^AI:|^Affirmation:/gi, '')
-    //.split(/[.!?\n]/)[0]
-    //.trim();
+    if (!data.candidates || data.candidates.length === 0 || !data.candidates[0].content?.parts?.[0]?.text) {
+      throw new Error('No response generated from Gemini');
+    }
+
+    let generatedText = data.candidates[0].content.parts[0].text.trim();
+
+    // Clean up response - remove quotes if present
+    generatedText = generatedText.replace(/^["']|["']$/g, '');
     
 
     if (!generatedText) {
